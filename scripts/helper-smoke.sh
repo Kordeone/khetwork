@@ -11,10 +11,18 @@ fi
 
 container="$2"
 primary_netns="$(podman exec "$container" readlink /proc/1/ns/net)"
+primary_pidns="$(podman exec "$container" readlink /proc/1/ns/pid)"
 echo "Primary netns before: $primary_netns"
+echo "Primary pidns before: $primary_pidns"
 
-podman exec --user wsclient -e "PRIMARY_NETNS=$primary_netns" "$container" \
-  unshare --user --map-root-user --net --mount --ipc --pid --fork --mount-proc \
+# Podman denies nested /proc mounts in this container. Keep the separate PID
+# namespace, but do not ask unshare to remount /proc. /proc remains inherited,
+# so this is only a bounded smoke test, NOT a production isolation model.
+# An isolated /proc mount is a release gate for any live scanner runner.
+if podman exec --user wsclient \
+  -e "PRIMARY_NETNS=$primary_netns" \
+  -e "PRIMARY_PIDNS=$primary_pidns" "$container" \
+  unshare --user --map-root-user --net --mount --ipc --pid --fork \
   sh -ec '
     mount --make-rprivate /
 
@@ -35,6 +43,7 @@ podman exec --user wsclient -e "PRIMARY_NETNS=$primary_netns" "$container" \
 
     test "$(id -u)" -eq 0
     test "$(readlink /proc/self/ns/net)" != "$PRIMARY_NETNS"
+    test "$(readlink /proc/self/ns/pid)" != "$PRIMARY_PIDNS"
     test -z "$(ip route show default)"
     test ! -e /run/windscribe/helper.sock
     test ! -e /run/dbus/system_bus_socket
@@ -58,7 +67,11 @@ podman exec --user wsclient -e "PRIMARY_NETNS=$primary_netns" "$container" \
     kill "$helper_pid" 2>/dev/null || :
     wait "$helper_pid" 2>/dev/null || :
     exit "$rc"
-  '
+  '; then
+  smoke_rc=0
+else
+  smoke_rc=$?
+fi
 
 after_netns="$(podman exec "$container" readlink /proc/1/ns/net)"
 [ "$after_netns" = "$primary_netns" ] || {
@@ -66,3 +79,4 @@ after_netns="$(podman exec "$container" readlink /proc/1/ns/net)"
   exit 1
 }
 echo "PASS: primary network namespace unchanged"
+exit "$smoke_rc"

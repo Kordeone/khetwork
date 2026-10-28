@@ -73,6 +73,16 @@ resolver cannot be privately covered. It then starts only the Windscribe
 helper for three seconds **without routes or an active VPN connection**,
 terminates it, and checks the original container's network namespace.
 
+**KHOMELAB finding:** The first opt-in smoke attempt stopped before the
+helper launched because nested `unshare --mount-proc` returned
+`Operation not permitted`. The revised smoke script retains a **separate PID
+namespace** and explicitly checks it, but cannot privately remount `/proc`.
+Consequently, an inherited `/proc` view may expose parent metadata; the
+script is *only* a bounded offline experiment. Do not run a live scanner
+using this namespace layout until its process-filesystem and network security
+are independently verified. The smoke script also verifies the primary
+network-namespace ID afterward, including after an inner failure.
+
 This does not validate a full helper + wsclient deployment, tunnel
 connectivity, credentials, no-leak proxy gateway or isolation from
 every possible global resource. The helper may fail if private D-Bus or

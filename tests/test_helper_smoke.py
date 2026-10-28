@@ -13,6 +13,14 @@ class HelperSmokeGuardTests(unittest.TestCase):
         run = subprocess.run(["sh", "-n", str(SCRIPT)], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stderr)
 
+    def test_keeps_pid_namespace_without_procmount(self):
+        script = SCRIPT.read_text()
+        self.assertIn("unshare --user --map-root-user --net --mount --ipc --pid --fork", script)
+        self.assertNotIn(" --mount-proc", script)
+        self.assertIn('test "$(readlink /proc/self/ns/pid)" != "$PRIMARY_PIDNS"', script)
+        self.assertIn('after_netns="$(podman exec "$container" readlink /proc/1/ns/net)"', script)
+        self.assertIn('exit "$smoke_rc"', script)
+
     def test_explicit_opt_in_required_before_any_podman_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

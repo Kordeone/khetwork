@@ -53,3 +53,28 @@ If this passes, the next prototype milestone is to launch a distinct helper/clie
 ## Security choices
 
 No credentials in the repository. Do not run the scanner using the primary Windscribe account's live directories. No host-wide firewall, hotspot, SSH or Nginx modifications. Do not expose an HTTP management listener. Existing KHROXY and XRAT installations remain independent.
+
+
+## Guarded offline helper startup experiment (next milestone)
+
+The namespace preflight has passed on KHOMELAB, but a real Windscribe
+connection has **not** been demonstrated. After reviewing
+`scripts/helper-smoke.sh`, update the prototype checkout and run:
+
+```sh
+python3 -m unittest discover -s tests -v
+sh scripts/helper-smoke.sh --smoke khroxy-windscribe-v4-online
+```
+
+The smoke script overlays **/run, /etc/windscribe, /var/lib/windscribe,
+/home, /var/log, /tmp and /etc/resolv.conf** inside a private user,
+mount, IPC, PID and network namespace. It explicitly fails if the
+resolver cannot be privately covered. It then starts only the Windscribe
+helper for three seconds **without routes or an active VPN connection**,
+terminates it, and checks the original container's network namespace.
+
+This does not validate a full helper + wsclient deployment, tunnel
+connectivity, credentials, no-leak proxy gateway or isolation from
+every possible global resource. The helper may fail if private D-Bus or
+additional user-identity setup is required. Do not weaken the primary
+container's permissions to make it work.
